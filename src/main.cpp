@@ -20,7 +20,7 @@ String ClientId;
 
 const char *MQTT_Server = {"broker.hivemq.com"};
 const int MQTT_Port = 1883;
-String topic = "Sergio/";
+String topic = "esteban/PIR/";
 
 WiFiClient wifiClient;
 PubSubClient MQTTClient(wifiClient);
@@ -69,7 +69,7 @@ void loop()
 
   StaticJsonDocument<200> doc;
   JsonObject object = doc.to<JsonObject>();
-  object["movimientos"] = movements;
+  object["movimientos"] = val == HIGH ? true : false;
   object["estado"] = dipState == HIGH ? true : false;
 
   char buffer[256];
