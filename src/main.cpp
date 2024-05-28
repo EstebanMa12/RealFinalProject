@@ -10,11 +10,13 @@
 #define SSID "esteban"
 #define PASS "david19mase"
 
-int pirState = LOW; // de inicio no hay movimiento
+bool pirState = LOW; // de inicio no hay movimiento
+bool ledIsOn = false;
+unsigned long lastPublishTime = 0;
+const unsigned long publishInterval = 20000;
+
 int val = 0;
 int dipState = 0;
-int movements = 0;
-bool ledIsOn = false;
 
 String ClientId;
 
@@ -27,6 +29,7 @@ PubSubClient MQTTClient(wifiClient);
 
 void InitWiFi();
 void connectToMQTT();
+void publishSensorState(bool motionDetected, bool dipState);
 
 void setup()
 {
@@ -41,14 +44,16 @@ void setup()
 
 void loop()
 {
-  connectToMQTT();
+  if (!MQTTClient.connected()) {
+    connectToMQTT();
+  }
+  MQTTClient.loop();
   int val = digitalRead(PIRPin);
   bool dipState = digitalRead(dipSwitch) == HIGH;
 
   if (val == HIGH && !ledIsOn)
   {                             // Si se detecta movimiento y el LED no está encendido
-    digitalWrite(LEDPin, HIGH); // Enciende el LED
-    movements++;                // Incrementa los movimientos
+    digitalWrite(LEDPin, HIGH); // Enciende el LED             // Incrementa los movimientos
     ledIsOn = true;             // Actualiza el estado del LED como encendido
     if (pirState == LOW)
     { // Si previamente estaba apagado
@@ -56,7 +61,7 @@ void loop()
       pirState = HIGH;
     }
   }
-  else if (!val && ledIsOn)
+  else if (val==LOW && ledIsOn)
   {                            // Si no se detecta movimiento pero el LED estaba encendido
     digitalWrite(LEDPin, LOW); // Apaga el LED
     ledIsOn = false;           // Actualiza el estado del LED como apagado
@@ -66,28 +71,36 @@ void loop()
       pirState = LOW;
     }
   }
-
-  StaticJsonDocument<200> doc;
-  JsonObject object = doc.to<JsonObject>();
-  object["movimientos"] = val == HIGH ? true : false;
-  object["estado"] = dipState == HIGH ? true : false;
-
-  char buffer[256];
-  size_t n = serializeJson(doc, buffer);
-
-  String message = "El sensor ha detectado " + String(movements) + " movimientos, y el estado del boton es: ";
-  message += dipState == HIGH ? "ON" : "OFF";
-
-  if (MQTTClient.publish(topic.c_str(), buffer, n))
+  unsigned long currentTime = millis();
+  if (currentTime - lastPublishTime >= publishInterval)
   {
-    Serial.println(message);
+    publishSensorState(pirState, dipState);
+    lastPublishTime = currentTime;
   }
 
   delay(500);
 }
 
+void publishSensorState(bool motionDetected, bool dipState)
+{
+  StaticJsonDocument<200> doc;
+  JsonObject object = doc.to<JsonObject>();
+  object["movementState"] = motionDetected;
+  object["buttonState"] = dipState;
+
+  char buffer[256];
+  size_t n = serializeJson(doc, buffer);
+
+  if (MQTTClient.publish(topic.c_str(), buffer, n))
+  {
+    String message = "El sensor está " + String(motionDetected ? "activo" : "inactivo") + ", y el estado del botón es: " + (dipState ? "ON" : "OFF");
+    Serial.println(message);
+  }
+}
+
 void connectToMQTT()
 {
+  Serial.print("Attempting MQTT connection...");
   if (!MQTTClient.connected())
   {
     ClientId = String(random(1000));
