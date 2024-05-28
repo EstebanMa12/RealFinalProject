@@ -11,7 +11,6 @@
 #define PASS "david19mase"
 
 bool pirState = LOW; // de inicio no hay movimiento
-bool ledIsOn = false;
 unsigned long lastPublishTime = 0;
 const unsigned long publishInterval = 20000;
 
@@ -30,6 +29,8 @@ PubSubClient MQTTClient(wifiClient);
 void InitWiFi();
 void connectToMQTT();
 void publishSensorState(bool motionDetected, bool dipState);
+void handlePIRSensor(int pirVal) ;
+void handlePublishing(bool dipState);
 
 void setup()
 {
@@ -51,34 +52,33 @@ void loop()
   int val = digitalRead(PIRPin);
   bool dipState = digitalRead(dipSwitch) == HIGH;
 
-  if (val == HIGH && !ledIsOn)
-  {                             // Si se detecta movimiento y el LED no está encendido
-    digitalWrite(LEDPin, HIGH); // Enciende el LED             // Incrementa los movimientos
-    ledIsOn = true;             // Actualiza el estado del LED como encendido
-    if (pirState == LOW)
-    { // Si previamente estaba apagado
+  handlePIRSensor(val);
+  handlePublishing(dipState);
+}
+
+void handlePIRSensor(int pirVal) {
+  if (pirVal == HIGH) {
+    digitalWrite(LEDPin, HIGH);
+    if (pirState == LOW) {
       Serial.println("Sensor activado");
       pirState = HIGH;
     }
-  }
-  else if (val==LOW && ledIsOn)
-  {                            // Si no se detecta movimiento pero el LED estaba encendido
-    digitalWrite(LEDPin, LOW); // Apaga el LED
-    ledIsOn = false;           // Actualiza el estado del LED como apagado
-    if (pirState == HIGH)
-    { // Si previamente estaba encendido
+  } else {
+    digitalWrite(LEDPin, LOW);
+    if (pirState == HIGH) {
       Serial.println("Sensor parado");
       pirState = LOW;
     }
   }
+}
+
+void handlePublishing(bool dipState) {
+  static unsigned long lastPublishTime = 0;
   unsigned long currentTime = millis();
-  if (currentTime - lastPublishTime >= publishInterval)
-  {
+  if (currentTime - lastPublishTime >= publishInterval) {
     publishSensorState(pirState, dipState);
     lastPublishTime = currentTime;
   }
-
-  delay(500);
 }
 
 void publishSensorState(bool motionDetected, bool dipState)
